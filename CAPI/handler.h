@@ -1,9 +1,9 @@
-#define _GNU_SOURCE
-#include "stdio.h"
-#include "openssl/ssl.h"
-#include "openssl/bio.h"
-#include "openssl/err.h"
-#include "string.h"
+//#define _GNU_SOURCE
+#include <stdio.h>
+#include <openssl/ssl.h>
+#include <openssl/bio.h>
+#include <openssl/err.h>
+#include <string.h>
 
 BIO * bio;
 SSL_CTX * ctx;
@@ -34,11 +34,10 @@ char * body_retriever(char* r) {
         printf("We found it! It is: %s\n", pch);
 }
 
-char *polling() {
+int polling(char **body) {
 	char *ptr;
-	char *body;
 	char *re = malloc (sizeof (char) * (4096+633+1));
-char request[] = "POST /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/getUpdates HTTP/1.1\x0D\x0AHost: api.telegram.org\x0D\x0A\x43ontent-Type: application/json\x0D\x0A\x43ontent-Length: 34\x0D\x0A\x43onnection: keep-alive\x0D\x0A\x0D\x0A{\"offset\":-1}";
+char request[] = "GET /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/getUpdates HTTP/1.1\x0D\x0AHost: api.telegram.org\x0D\x0A\x43ontent-Type: application/json\x0D\x0A\x43ontent-Length: 11\x0D\x0A\x43onnection: keep-alive\x0D\x0A\x0D\x0A{\"limit\":1}";
 //char request[] = "GET /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/getUpdates?offset=-1";
 
 	/* Write request */
@@ -63,7 +62,7 @@ char request[] = "POST /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/getUpda
 	printf("For\n");
 	for(;;) {
                 t = BIO_read(bio, re, 4096+633);
-		printf("Read\n");
+		printf("Read: %d\n", t);
                 if(t <= 0) break;
                 re[t] = 0;
 		printf("strlen risposta: %d\n", strlen(re));
@@ -73,14 +72,15 @@ char request[] = "POST /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/getUpda
 		char *res = (char*)malloc(sizeof(char)*(len+1));
 		strncpy(res, p1, len);
 		res[len] = '\0';
-		body = strstr(re, "\x0D\x0A\x0D\x0A")+4;
-		if(strlen(body)==strtol(res, &ptr, 10)) {
+		*body = strstr(re, "\x0D\x0A\x0D\x0A")+4;
+		printf("Body: %s\n", *body);
+		if(strlen(*body)==strtol(res, &ptr, 10)) {
 			free(res);
 			break;
 		}
         }
 
-        return re;
+        return t;
 
 }
 

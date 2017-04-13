@@ -40,9 +40,13 @@ char *text;
 
 	/* Sample message */
 
-	char *poll = polling();
-	printf("Polling: %s\n", poll);
-	writer("sendMessage", 66441008, poll);
+	char *body;
+	while(1) {
+		int poll = polling(&body);
+		printf("Polled %d bytes, body is:\n%s\n", poll, body);
+		sleep(1);
+	}
+	writer("sendMessage", 66441008, "Ciao");
 
 	/* Closing connection */
 
