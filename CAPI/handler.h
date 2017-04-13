@@ -34,15 +34,20 @@ char * body_retriever(char* r) {
         printf("We found it! It is: %s\n", pch);
 }
 
-int polling(char **body) {
+int polling(char **body, int update_id) {
 	char *ptr;
 	char *re = malloc (sizeof (char) * (4096+633+1));
-char request[] = "GET /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/getUpdates HTTP/1.1\x0D\x0AHost: api.telegram.org\x0D\x0A\x43ontent-Type: application/json\x0D\x0A\x43ontent-Length: 11\x0D\x0A\x43onnection: keep-alive\x0D\x0A\x0D\x0A{\"limit\":1}";
-//char request[] = "GET /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/getUpdates?offset=-1";
+//	char request[] = "GET /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/getUpdates HTTP/1.1\x0D\x0AHost: api.telegram.org\x0D\x0A\x43ontent-Type: application/json\x0D\x0A\x43ontent-Length: 11\x0D\x0A\x43onnection: keep-alive\x0D\x0A\x0D\x0A{\"limit\":1}";
+	char *messaggio;
+	int size = asprintf(&messaggio, "%s%d%s", "{\"limit\":1,\"offset\":", update_id, "}");
+	char *request;
+	size = asprintf(&request, "%s%d%s%s", "GET /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/getUpdates HTTP/1.1\x0D\x0AHost: api.telegram.org\x0D\x0A\x43ontent-Type: application/json\x0D\x0A\x43ontent-Length: ", strlen(messaggio), "\x0D\x0A\x43onnection: keep-alive\x0D\x0A\x0D\x0A", messaggio);
+	free(messaggio);
 
 	/* Write request */
 
         BIO_write(bio, request, strlen(request));
+	free(request);
 //	printf("Request sent\n");
 
         /* Read in the response */
@@ -73,7 +78,7 @@ char request[] = "GET /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/getUpdat
 		strncpy(res, p1, len);
 		res[len] = '\0';
 		*body = strstr(re, "\x0D\x0A\x0D\x0A")+4;
-		printf("Body: %s\n", *body);
+//		printf("Body: %s\n", *body);
 		if(strlen(*body)==strtol(res, &ptr, 10)) {
 			free(res);
 			break;

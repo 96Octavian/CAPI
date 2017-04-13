@@ -1,5 +1,14 @@
 #include <unistd.h>
 #include "handler.h"
+#include "jsmn/jsmn.h"
+
+static int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
+		if (tok->type == JSMN_STRING && (int) strlen(s) == tok->end - tok->start &&
+			strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
+				return 0;
+			}
+		return -1;
+		}
 
 int main() {
 
@@ -41,9 +50,69 @@ char *text;
 	/* Sample message */
 
 	char *body;
+	int update_id = 0;
 	while(1) {
-		int poll = polling(&body);
+		int poll = polling(&body, update_id);
 		printf("Polled %d bytes, body is:\n%s\n", poll, body);
+
+//		body = "{\"ok\":\"true\",\"result\":\"vero\"}";
+//		printf("New body: %s\n", body);
+		
+		int i;
+		int r;
+		char *ptr;
+		jsmn_parser p;
+		jsmntok_t t[128];
+		jsmn_init(&p);
+		r = jsmn_parse(&p, body, strlen(body), t, sizeof(t)/sizeof(t[0]));
+		if (r < 0) {
+			printf("Failed to parse JSON: %d\n", r);
+			return 1;
+		}
+
+		/* Assume the top-level element is an object */
+		if (r < 1 || t[0].type != JSMN_OBJECT) {
+			printf("Object expected\n");
+			return 1;
+		}
+
+
+		for (i = 1; i < r; i++) {
+		if (jsoneq(body, &t[i], "ok") == 0) {
+			/* We may use strndup() to fetch string value */
+			printf("- OK: %.*s\n", t[i+1].end-t[i+1].start,
+					body + t[i+1].start);
+			i++;
+		} else if (jsoneq(body, &t[i], "result") == 0) {
+			/* We may additionally check if the value is either "true" or "false" */
+			printf("- Result: %.*s\n", t[i+1].end-t[i+1].start,
+					body + t[i+1].start);
+			i++;
+		} else if (jsoneq(body, &t[i], "update_id") == 0) {
+			update_id = strtol(body + t[i+1].start, &ptr, 10)+1;
+			/* We may want to do strtol() here to get numeric value */
+			printf("- update_id: %.*s\n", t[i+1].end-t[i+1].start,
+					body + t[i+1].start);
+			i++;
+		} /*else if (jsoneq(body, &t[i], "groups") == 0) {
+			int j;
+			printf("- Groups:\n");
+			if (t[i+1].type != JSMN_ARRAY) {
+				continue; /* We expect groups to be an array of strings 
+			}
+			for (j = 0; j < t[i+1].size; j++) {
+				jsmntok_t *g = &t[i+j+2];
+				printf("  * %.*s\n", g->end - g->start, body + g->start);
+			}
+			i += t[i+1].size + 1;
+		}*/ else {
+//			printf("Unexpected key: %.*s\n", t[i].end-t[i].start, body + t[i].start);
+			continue;
+		}
+	}
+
+
+
 		sleep(1);
 	}
 	writer("sendMessage", 66441008, "Ciao");
