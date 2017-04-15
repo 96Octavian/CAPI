@@ -4,10 +4,10 @@
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <string.h>
+#include <pthread.h>
 
 BIO * bio;
 SSL_CTX * ctx;
-int response_code, t;
 
 char * body_retriever(char* r) {
 	char *rest;
@@ -35,12 +35,13 @@ char * body_retriever(char* r) {
 }
 
 int polling(char **body, int update_id) {
-	char *ptr;
+
+	/* Costruzione richiesta HTTP */
+
+	int t;
+	char *ptr, *messaggio, *request;
 	char *re = malloc (sizeof (char) * (4096+633+1));
-//	char request[] = "GET /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/getUpdates HTTP/1.1\x0D\x0AHost: api.telegram.org\x0D\x0A\x43ontent-Type: application/json\x0D\x0A\x43ontent-Length: 11\x0D\x0A\x43onnection: keep-alive\x0D\x0A\x0D\x0A{\"limit\":1}";
-	char *messaggio;
 	int size = asprintf(&messaggio, "%s%d%s", "{\"limit\":1,\"offset\":", update_id, "}");
-	char *request;
 	size = asprintf(&request, "%s%d%s%s", "GET /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/getUpdates HTTP/1.1\x0D\x0AHost: api.telegram.org\x0D\x0A\x43ontent-Type: application/json\x0D\x0A\x43ontent-Length: ", strlen(messaggio), "\x0D\x0A\x43onnection: keep-alive\x0D\x0A\x0D\x0A", messaggio);
 	free(messaggio);
 
@@ -48,60 +49,46 @@ int polling(char **body, int update_id) {
 
         BIO_write(bio, request, strlen(request));
 	free(request);
-//	printf("Request sent\n");
 
         /* Read in the response */
 
-	/*while(1) {
-		printf("Loop\n");
-		t = BIO_read(bio, re, 1024);
-		if(t <= 0) {
-			printf("No response received\n");
-			return NULL;
-		}
-		else {
-			re[t] = 0;
-			break;
-		}
-	}*/
-	printf("For\n");
 	for(;;) {
                 t = BIO_read(bio, re, 4096+633);
-		printf("Read: %d\n", t);
-                if(t <= 0) break;
+                if(t <= 0) break;	//Errore nella ricezione
                 re[t] = 0;
-		printf("strlen risposta: %d\n", strlen(re));
+		if(strstr(re, "HTTP/1.1 200 OK")==NULL) {
+			free(re);
+			return 0;
+		}			
+		/* Lunghezza del corpo */
 		const char *p1 = strstr(re, "Content-Length: ")+16;
 		const char *p2 = strstr(p1, "\x0D\x0A");
 		size_t len = p2-p1;
 		char *res = (char*)malloc(sizeof(char)*(len+1));
 		strncpy(res, p1, len);
 		res[len] = '\0';
-		*body = strstr(re, "\x0D\x0A\x0D\x0A")+4;
-//		printf("Body: %s\n", *body);
+		*body = strstr(re, "\x0D\x0A\x0D\x0A")+4;	//Corpo della risposta
+		free(re);
+		/* controlla se hai letto tutto il corpo */
 		if(strlen(*body)==strtol(res, &ptr, 10)) {
 			free(res);
 			break;
 		}
         }
-
         return t;
 
 }
 
-char *writer(char *method, int chat_id, char *text) {
-	int p;
+int writer(char *method, int chat_id, char *text, char **body) {
 
-	char *messaggio;
-        int size = asprintf(&messaggio, "%s%d%s%s%s", "{\"chat_id\":", chat_id, ",\"text\":\"", text, "\"}");
-        char *request;
-        size = asprintf(&request, "%s%s%s%d%s%s", "GET /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/", method, " HTTP/1.1\x0D\x0AHost: api.telegram.org\x0D\x0A\x43ontent-Type: application/json\x0D\x0A\x43ontent-Length: ", strlen(messaggio)*sizeof(char), "\x0D\x0A\x43onnection: keep-alive\x0D\x0A\x0D\x0A", messaggio);
+	/* Costruzione richiesta HTTP */
+
+	int p;
+	char *ptr, *messaggio, *request;
+	char *re = malloc (sizeof (char) * (4096+633+1));
+	int size = asprintf(&messaggio, "%s%d%s%s%s", "{\"chat_id\":", chat_id, ",\"text\":\"", text, "\"}");
+	size = asprintf(&request, "%s%s%s%d%s%s", "GET /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/", method, " HTTP/1.1\x0D\x0AHost: api.telegram.org\x0D\x0A\x43ontent-Type: application/json\x0D\x0A\x43ontent-Length: ", strlen(messaggio)*sizeof(char), "\x0D\x0A\x43onnection: keep-alive\x0D\x0A\x0D\x0A", messaggio);
 	free(messaggio);
-//	printf("\nRequest:\n%s\n", request);
-	//char request[] = "POST /bot199805787:AAHugpIHv3kuYEuP35ugcqvmam7C6utuevg/sendMessage HTTP/1.1\x0D\x0AHost: api.telegram.org\x0D\x0A\x43ontent-Type: application/json\x0D\x0A\x43ontent-Length: 34\x0D\x0A\x43onnection: keep-alive\x0D\x0A\x0D\x0A{\"chat_id\":66441008,\"text\":\"Ciao\"}";
-        char r[608+4096+1];
-	char *ptr;
-	char *body;
 
 	/* Write request */
 
@@ -110,8 +97,8 @@ char *writer(char *method, int chat_id, char *text) {
 
         /* Read in the response */
 
-	for(;;) {
-                p = BIO_read(bio, r, 4095);
+	/*for(;;) {
+                p = BIO_read(bio, re, 4096+633);
                 if(p <= 0) break;
                 r[p] = 0;
 		printf("strlen risposta: %d\n", strlen(r));
@@ -126,11 +113,35 @@ char *writer(char *method, int chat_id, char *text) {
 			free(res);
 			break;
 		}
+        }*/
+
+	for(;;) {
+                p = BIO_read(bio, re, 4096+633);
+                if(p <= 0) break;	//Errore nella ricezione
+                re[p] = 0;
+		if(strstr(re, "HTTP/1.1 200 OK")==NULL) {
+			free(re);
+			return 0;
+		}			
+		/* Lunghezza del corpo */
+		const char *p1 = strstr(re, "Content-Length: ")+16;
+		const char *p2 = strstr(p1, "\x0D\x0A");
+		size_t len = p2-p1;
+		char *res = (char*)malloc(sizeof(char)*(len+1));
+		strncpy(res, p1, len);
+		res[len] = '\0';
+		*body = strstr(re, "\x0D\x0A\x0D\x0A")+4;	//Corpo della risposta
+		free(re);
+		/* controlla se hai letto tutto il corpo */
+		if(strlen(*body)==strtol(res, &ptr, 10)) {
+			free(res);
+			break;
+		}
         }
 
 //        char *result = body_retriever(r);       //r is the response
-	printf("Body:\n%s", body);
-        return body;
+//	printf("Body:\n%s", body);
+        return p;
 }
 
 int connecter() {
